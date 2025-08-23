@@ -52,7 +52,7 @@ public class McpSseWebFluxConfig {
                                             "0.1.0",       // version
                                             ""             // description
                                         ),
-                                        "0.10.0"
+                                        io.modelcontextprotocol.spec.ProtocolVersions.MCP_2025_06_18
                                     )
                                 );
                             }

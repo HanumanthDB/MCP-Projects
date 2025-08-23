@@ -10,9 +10,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.*;
 import jakarta.annotation.PostConstruct;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @RestController
 @RequestMapping("/tools")
 public class ToolController {
+
+    private static final Logger log = LoggerFactory.getLogger(ToolController.class);
 
     private final SwaggerApiDiscoveryService swaggerApiDiscoveryService;
     private final EndpointInvokerService endpointInvokerService;
@@ -29,14 +34,18 @@ public class ToolController {
 
     @PostConstruct
     public void loadTools() {
+        log.info("Loading tools from Swagger at configured api url: {}", swaggerApiUrl);
         List<DynamicToolDefinition> tools = swaggerApiDiscoveryService.loadToolsFromSwagger(swaggerApiUrl);
         for (DynamicToolDefinition tool : tools) {
+            log.info("Discovered tool: {} -> {}", tool.getId(), tool.getSummary());
             toolRegistry.put(tool.getId(), tool);
         }
+        log.info("Tool registry now has {} tools.", toolRegistry.size());
     }
 
     @GetMapping
     public List<DynamicToolDefinition> listTools() {
+        log.info("Listing all registered tools (count={})", toolRegistry.size());
         return new ArrayList<>(toolRegistry.values());
     }
 
@@ -45,8 +54,10 @@ public class ToolController {
             @PathVariable String toolId,
             @RequestBody(required = false) Map<String, Object> params
     ) {
+        log.info("Invoke requested for toolId: {}", toolId);
         DynamicToolDefinition tool = toolRegistry.get(toolId);
         if (tool == null) {
+            log.warn("Invocation failed: No tool with id: {}", toolId);
             return ResponseEntity.badRequest().body("No tool with id: " + toolId);
         }
         if (params == null) params = new HashMap<>();
@@ -64,18 +75,23 @@ public class ToolController {
                 path = path.substring(0, path.lastIndexOf('/'));
             }
             apiBaseUrl = scheme + "://" + host + (port > 0 ? (":" + port) : "") + (path != null && !path.isEmpty() ? path : "");
-            System.out.println("Resolved base URL: " + apiBaseUrl);
+            log.debug("Resolved base URL: {}", apiBaseUrl);
             if (host == null || scheme == null || apiBaseUrl.trim().equals("://")) {
                 apiBaseUrl = "https://petstore.swagger.io/v2";
+                log.debug("Defaulted base URL to {}", apiBaseUrl);
             }
         } catch (Exception e) {
             apiBaseUrl = "https://petstore.swagger.io/v2";
+            log.warn("Failed to parse Swagger API URL '{}', defaulted apiBaseUrl to {}", swaggerApiUrl, apiBaseUrl, e);
         }
         params.put("_apiBaseUrl", apiBaseUrl);
         try {
+            log.info("Invoking endpoint for tool: {} with params: {}", toolId, params);
             String result = endpointInvokerService.invokeEndpoint(tool, params);
+            log.info("Invocation for tool {} returned result of length {}", toolId, result != null ? result.length() : 0);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
+            log.error("Invocation failed for toolId={} with params={}, error={}", toolId, params, e.getMessage(), e);
             return ResponseEntity.internalServerError().body("Invocation failed: " + e.getMessage());
         }
     }

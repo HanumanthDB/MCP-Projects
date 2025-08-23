@@ -4,8 +4,13 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import org.mcp.swaggerserver.model.DynamicToolDefinition;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 public class SwaggerApiDiscoveryService {
+
+    private static final Logger log = LoggerFactory.getLogger(SwaggerApiDiscoveryService.class);
 
     /**
      * Loads and parses the Swagger/OpenAPI spec from the given URL,
@@ -15,11 +20,12 @@ public class SwaggerApiDiscoveryService {
      * @return List of endpoint definitions, to be exposed as MCP tools
      */
     public List<DynamicToolDefinition> loadToolsFromSwagger(String swaggerUrl) {
-        // Load Swagger/OpenAPI (v2/v3) spec and extract endpoints as tool definitions.
+        log.info("Loading Swagger/OpenAPI spec from URL: {}", swaggerUrl);
         try {
             io.swagger.v3.parser.OpenAPIV3Parser v3Parser = new io.swagger.v3.parser.OpenAPIV3Parser();
             io.swagger.v3.oas.models.OpenAPI openApi = v3Parser.read(swaggerUrl);
             if (openApi == null) {
+                log.error("Failed to parse Swagger/OpenAPI spec from '{}': parser returned null", swaggerUrl);
                 throw new RuntimeException("Failed to parse Swagger/OpenAPI spec from: " + swaggerUrl);
             }
             List<DynamicToolDefinition> tools = new java.util.ArrayList<>();
@@ -55,11 +61,16 @@ public class SwaggerApiDiscoveryService {
                                 parameters
                         );
                         tools.add(tool);
+                        log.info("Discovered tool from Swagger: id={}, method={}, path={}", tool.getId(), tool.getMethod(), tool.getPath());
                     });
                 });
+            } else {
+                log.warn("Swagger/OpenAPI spec at '{}' has no paths.", swaggerUrl);
             }
+            log.info("Total {} tools loaded from Swagger/OpenAPI '{}'", tools.size(), swaggerUrl);
             return tools;
         } catch (Exception ex) {
+            log.error("Error loading Swagger/OpenAPI from '{}': {}", swaggerUrl, ex.getMessage(), ex);
             throw new RuntimeException("Error loading Swagger/OpenAPI from " + swaggerUrl, ex);
         }
     }
