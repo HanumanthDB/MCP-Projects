@@ -31,9 +31,11 @@ public class MCPDynamicToolRegistrar {
      * @param toolDefinitions List of parsed dynamic tool definitions
      */
     public void registerTools(List<DynamicToolDefinition> toolDefinitions) {
+        log.debug("registerTools called with {} tool(s)", toolDefinitions != null ? toolDefinitions.size() : 0);
         log.info("Registering {} dynamic tool(s) to MCP server ...", toolDefinitions != null ? toolDefinitions.size() : 0);
         if (toolDefinitions != null) {
             for (DynamicToolDefinition tool : toolDefinitions) {
+                log.debug("Registering tool id={} method={} path={}", tool.getId(), tool.getMethod(), tool.getPath());
                 try {
                     String schema = buildInputJsonSchema(tool);
 
@@ -58,6 +60,7 @@ public class MCPDynamicToolRegistrar {
 
                     mcpAsyncServer.addTool(toolSpec)
                         .doOnSuccess(v -> log.info("Registered MCP tool: id={}, method={}, path={}", tool.getId(), tool.getMethod(), tool.getPath()))
+                        .doOnError(e -> log.debug("Failed to register tool id={}: {}", tool.getId(), e))
                         .subscribe();
                 } catch (Exception e) {
                     log.error("Failed to register tool: id={}, error={}", tool.getId(), e.getMessage(), e);

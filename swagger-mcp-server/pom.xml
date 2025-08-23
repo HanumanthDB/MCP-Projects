@@ -64,9 +64,20 @@
                     <artifactId>spring-boot-starter-logging</artifactId>
                 </exclusion>
             </exclusions>
-        </dependency>
-        <!-- Lombok for cleaner code; optional but helpful -->
-        <dependency>
+    </dependency>
+    <!-- OpenAPI 3.1.0 Parser: openapi4j for newer spec support -->
+    <dependency>
+        <groupId>org.openapi4j</groupId>
+        <artifactId>openapi-parser</artifactId>
+        <version>1.0.7</version>
+    </dependency>
+    <dependency>
+        <groupId>org.openapi4j</groupId>
+        <artifactId>openapi-core</artifactId>
+        <version>1.0.7</version>
+    </dependency>
+    <!-- Lombok for cleaner code; optional but helpful -->
+    <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
