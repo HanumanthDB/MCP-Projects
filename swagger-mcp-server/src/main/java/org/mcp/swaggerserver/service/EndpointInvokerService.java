@@ -37,7 +37,12 @@ public class EndpointInvokerService {
         }
         String url = apiBaseUrl + path;
 
-        org.springframework.web.reactive.function.client.WebClient client = org.springframework.web.reactive.function.client.WebClient.builder().build();
+        org.springframework.web.reactive.function.client.WebClient client = org.springframework.web.reactive.function.client.WebClient.builder()
+            .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                reactor.netty.http.client.HttpClient.create()
+                    .responseTimeout(java.time.Duration.ofSeconds(5))
+            ))
+            .build();
         String method = toolDefinition.getMethod().toUpperCase();
 
         try {

@@ -69,17 +69,32 @@ public class ToolController {
             String host = uri.getHost();
             int port = uri.getPort();
             String path = uri.getPath();
-            if (host == null) host = uri.getAuthority(); // fallback
-            // Remove last segment i.e., /swagger.json or /swagger.yaml
+
+            // Remove /swagger.json or /swagger.yaml for Petstore, but preserve traling slash if needed
             if (path != null && (path.endsWith("/swagger.json") || path.endsWith("/swagger.yaml"))) {
                 path = path.substring(0, path.lastIndexOf('/'));
             }
-            apiBaseUrl = scheme + "://" + host + (port > 0 ? (":" + port) : "") + (path != null && !path.isEmpty() ? path : "");
-            log.debug("Resolved base URL: {}", apiBaseUrl);
-            if (host == null || scheme == null || apiBaseUrl.trim().equals("://")) {
+            // If path is just blank or "/", don't append to apiBaseUrl
+            StringBuilder baseUrlBuilder = new StringBuilder();
+            if (scheme != null && host != null) {
+                baseUrlBuilder.append(scheme).append("://").append(host);
+                if (port > 0) {
+                    baseUrlBuilder.append(":").append(port);
+                }
+                if (path != null && !path.trim().isEmpty() && !path.trim().equals("/")) {
+                    baseUrlBuilder.append(path);
+                }
+                apiBaseUrl = baseUrlBuilder.toString();
+            } else {
+                log.warn("Parsed host or scheme was null for '{}', falling back", swaggerApiUrl);
                 apiBaseUrl = "https://petstore.swagger.io/v2";
-                log.debug("Defaulted base URL to {}", apiBaseUrl);
             }
+            // Further validation: fallback if resolved baseUrl is accidentally localhost (bad env!)
+            if (apiBaseUrl.contains("localhost") || apiBaseUrl.endsWith("://")) {
+                log.warn("Resolved apiBaseUrl looks like localhost or invalid, falling back");
+                apiBaseUrl = "https://petstore.swagger.io/v2";
+            }
+            log.debug("Resolved base URL: {}", apiBaseUrl);
         } catch (Exception e) {
             apiBaseUrl = "https://petstore.swagger.io/v2";
             log.warn("Failed to parse Swagger API URL '{}', defaulted apiBaseUrl to {}", swaggerApiUrl, apiBaseUrl, e);
