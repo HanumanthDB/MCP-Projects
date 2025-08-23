@@ -19,6 +19,15 @@ public class EndpointInvokerService {
     @Value("${api.base.url}")
     private String apiBaseUrlConfig;
 
+    @Value("${auth.header.name:}")
+    private String authHeaderName;
+
+    @Value("${auth.header.prefix:}")
+    private String authHeaderPrefix;
+
+    @Value("${auth.token.value:}")
+    private String authTokenValue;
+
     /**
      * Call the actual API endpoint described in the tool definition,
      * passing dynamic parameters.
@@ -47,6 +56,16 @@ public class EndpointInvokerService {
         String method = toolDefinition.getMethod().toUpperCase();
 
         try {
+            // Prepare authentication header if values are present
+            HttpHeaders commonHeaders = new HttpHeaders();
+            if (authHeaderName != null && !authHeaderName.isEmpty() &&
+                authTokenValue != null && !authTokenValue.isEmpty()) {
+                String headerValue = (authHeaderPrefix != null && !authHeaderPrefix.isEmpty())
+                        ? authHeaderPrefix + " " + authTokenValue
+                        : authTokenValue;
+                commonHeaders.set(authHeaderName, headerValue);
+            }
+
             if ("GET".equals(method)) {
                 log.debug("RestTemplate GET URL: {}", url);
                 log.debug("Input params for GET: {}", inputParams);
@@ -63,14 +82,16 @@ public class EndpointInvokerService {
                     }
                     url = sb.toString();
                 }
-                ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+                HttpEntity<Void> entity = new HttpEntity<>(commonHeaders);
+                ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
                 log.info("GET to {} returned {} bytes", url, response.getBody() != null ? response.getBody().length() : 0);
                 return reactor.core.publisher.Mono.justOrEmpty(response.getBody());
             } else if ("DELETE".equals(method)) {
                 log.debug("RestTemplate DELETE URL: {}", url);
                 log.debug("Input params for DELETE: {}", inputParams);
-                restTemplate.delete(url);
-                log.info("DELETE to {} executed", url);
+                HttpEntity<Void> entity = new HttpEntity<>(commonHeaders);
+                ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.DELETE, entity, String.class);
+                log.info("DELETE to {} executed, status={}", url, response.getStatusCode());
                 return reactor.core.publisher.Mono.just("Deleted");
             } else if ("POST".equals(method) || "PUT".equals(method)) {
                 StringBuilder urlWithQuery = new StringBuilder(url);
@@ -86,6 +107,7 @@ public class EndpointInvokerService {
                 }
                 HttpHeaders headers = new HttpHeaders();
                 headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.putAll(commonHeaders);
 
                 HttpEntity<Object> entity;
                 if (inputParams.containsKey("body")) {
