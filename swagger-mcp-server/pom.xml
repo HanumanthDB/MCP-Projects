@@ -7,6 +7,7 @@
     <version>1.0.0-SNAPSHOT</version>
     <name>Swagger MCP Server</name>
     <description>Generic Swagger MCP Server using Spring Boot</description>
+
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -20,41 +21,44 @@
         <spring-boot.version>3.3.0</spring-boot.version>
         <swagger.parser.version>2.1.20</swagger.parser.version>
         <openapi.parser.version>2.1.19</openapi.parser.version>
+        <log4j2.version>2.23.1</log4j2.version>
     </properties>
 
     <dependencies>
-        <!-- Spring Boot WebFlux ONLY (for REST+SSE/reactive endpoints) -->
-        <!-- <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency> -->
         <!-- MCP SDK -->
         <dependency>
             <groupId>io.modelcontextprotocol.sdk</groupId>
             <artifactId>mcp</artifactId>
-            <version>0.11.2</version>
+            <version>${mcp.sdk.version}</version>
         </dependency>
-        <!-- MCP Spring Web MVC SSE Transport -->
-       <!-- https://mvnrepository.com/artifact/io.modelcontextprotocol.sdk/mcp-spring-webflux -->
-<dependency>
-    <groupId>io.modelcontextprotocol.sdk</groupId>
-    <artifactId>mcp-spring-webflux</artifactId>
-    <version>0.11.2</version>
-</dependency>
 
-        <!-- Swagger/OpenAPI parser (v2/v3) -->
+        <!-- MCP Spring WebFlux transport -->
         <dependency>
-            <groupId>io.swagger.parser.v3</groupId>
-            <artifactId>swagger-parser</artifactId>
-            <version>2.1.19</version>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-spring-webflux</artifactId>
+            <version>${mcp.sdk.version}</version>
         </dependency>
-        <!-- Swagger/OpenAPI v3 Parser -->
+
+        <!-- Swagger/OpenAPI parser -->
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
             <artifactId>swagger-parser</artifactId>
             <version>${swagger.parser.version}</version>
         </dependency>
-        <!-- HTTP Client (for invoking swagger endpoints) -->
+
+        <!-- OpenAPI 3.1.x parser support -->
+        <dependency>
+            <groupId>org.openapi4j</groupId>
+            <artifactId>openapi-parser</artifactId>
+            <version>1.0.7</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openapi4j</groupId>
+            <artifactId>openapi-core</artifactId>
+            <version>1.0.7</version>
+        </dependency>
+
+        <!-- Spring WebFlux (exclude default logging) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
@@ -64,38 +68,29 @@
                     <artifactId>spring-boot-starter-logging</artifactId>
                 </exclusion>
             </exclusions>
-    </dependency>
-    <!-- OpenAPI 3.1.0 Parser: openapi4j for newer spec support -->
-    <dependency>
-        <groupId>org.openapi4j</groupId>
-        <artifactId>openapi-parser</artifactId>
-        <version>1.0.7</version>
-    </dependency>
-    <dependency>
-        <groupId>org.openapi4j</groupId>
-        <artifactId>openapi-core</artifactId>
-        <version>1.0.7</version>
-    </dependency>
-    <!-- Lombok for cleaner code; optional but helpful -->
-    <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
         </dependency>
-        <!-- Logging: Use Log4j2 (exclude default logging from all starters) -->
+
+        <!-- Logging: Log4j2 as SLF4J provider -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>2.23.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
         </dependency>
+
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -109,23 +104,25 @@
             </exclusions>
         </dependency>
 
-        <!-- Actuator for health/info endpoints -->
+        <!-- Actuator for health/info -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- Jakarta Annotations API (PostConstruct, etc) -->
+        <!-- Jakarta Annotations -->
         <dependency>
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
         </dependency>
+
+        <!-- MockWebServer for testing -->
         <dependency>
-      <groupId>com.squareup.okhttp3</groupId>
-      <artifactId>mockwebserver</artifactId>
-      <scope>test</scope>
-    </dependency>
-</dependencies>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>mockwebserver</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
     <build>
         <plugins>
