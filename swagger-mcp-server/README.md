@@ -1,5 +1,62 @@
 # Swagger MCP Server
 
+## Cline MCP Usage & Configuration
+
+This MCP server exposes every endpoint in your configured Swagger/OpenAPI JSON as an MCP-compatible set of tools.
+You can use **Cline** as an MCP client to auto-discover, list, and invoke any of these tools from the command line or compatible IDE.
+
+### 1. Quick Start
+
+- Launch your MCP server:
+
+  ```sh
+  cd swagger-mcp-server
+  mvn spring-boot:run
+  ```
+
+  By default, it will listen on `http://localhost:8081`, and expose the Swagger endpoint configured in `application.properties`.
+
+### 2. Cline MCP Configuration Example
+
+Add the following JSON to your `.mcp/config.json`:
+
+```json
+{
+  "servers": [
+    {
+      "name": "swagger-mcp-server",
+      "uri": "http://localhost:8081",
+      "description": "Generic MCP server exposing endpoints from your configured Swagger/OpenAPI definition as tools.",
+      "tools_path": "/tools",
+      "invoke_path_template": "/tools/{toolId}/invoke",
+      "options": {
+        "swaggerApiUrl": "https://petstore.swagger.io/v2/swagger.json"
+      }
+    }
+  ]
+}
+```
+
+- Adjust "uri" and "swaggerApiUrl" as needed for your setup.
+
+### 3. Usage
+
+- Reload or restart Cline; it will auto-discover all tools.
+- List all available Swagger-backed tools:
+  ```
+  cline mcp list-tools --server swagger-mcp-server
+  ```
+- Invoke any tool (replace {toolId} and JSON body as needed):
+  ```
+  cline mcp invoke-tool --server swagger-mcp-server --tool-id loginUser --params '{"username":"user1","password":"pass"}'
+  ```
+
+### 4. Further Integration
+
+You can register any other Swagger/OpenAPI endpoint by setting `swagger.api.url` in `application.properties` before server launch.
+
+For advanced options or troubleshooting, see the main MCP project or Cline documentation.
+
 A generic Model Context Protocol (MCP) server built using Spring Boot that dynamically converts any Swagger/OpenAPI (v2 or v3, JSON or YAML) API into MCP-exposed tools. Each discovered endpoint is exposed as a tool, allowing secure and unified access via the MCP interface.
 
 ## Features

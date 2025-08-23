@@ -35,24 +35,42 @@ public class EndpointInvokerService {
         String method = toolDefinition.getMethod().toUpperCase();
 
         if ("GET".equals(method)) {
-            return client.get().uri(uriBuilder -> {
-                org.springframework.web.util.UriBuilder builder = uriBuilder.path(url);
-                for (DynamicToolDefinition.ToolParameter param : toolDefinition.getParameters()) {
-                    if ("query".equals(param.getInType()) && inputParams.containsKey(param.getName())) {
-                        builder.queryParam(param.getName(), inputParams.get(param.getName()));
+            System.out.println("[WebClient] GET URL: " + url);
+            if (url.startsWith("http")) {
+                // Absolute URL
+                return client.get().uri(url)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+            } else {
+                // Relative path
+                return client.get().uri(uriBuilder -> {
+                    org.springframework.web.util.UriBuilder builder = uriBuilder.path(url);
+                    for (DynamicToolDefinition.ToolParameter param : toolDefinition.getParameters()) {
+                        if ("query".equals(param.getInType()) && inputParams.containsKey(param.getName())) {
+                            builder.queryParam(param.getName(), inputParams.get(param.getName()));
+                        }
                     }
-                }
-                return builder.build();
-            })
-            .retrieve()
-            .bodyToMono(String.class)
-            .block();
-        } else if ("DELETE".equals(method)) {
-            // Assume no body or query, if needed add similar to GET
-            return client.delete().uri(url)
+                    return builder.build();
+                })
                 .retrieve()
                 .bodyToMono(String.class)
                 .block();
+            }
+        } else if ("DELETE".equals(method)) {
+            // Assume no body or query, if needed add similar to GET
+            System.out.println("[WebClient] DELETE URL: " + url);
+            if (url.startsWith("http")) {
+                return client.delete().uri(url)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+            } else {
+                return client.delete().uri(url)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+            }
         } else if ("POST".equals(method) || "PUT".equals(method)) {
             StringBuilder urlWithQuery = new StringBuilder(url);
             boolean hasQuery = false;
@@ -63,10 +81,17 @@ public class EndpointInvokerService {
                     hasQuery = true;
                 }
             }
-            org.springframework.web.reactive.function.client.WebClient.RequestBodySpec req =
-                "POST".equals(method)
-                ? client.post().uri(urlWithQuery.toString())
-                : client.put().uri(urlWithQuery.toString());
+            System.out.println("[WebClient] " + method + " URL: " + urlWithQuery);
+            org.springframework.web.reactive.function.client.WebClient.RequestBodySpec req;
+            if (urlWithQuery.toString().startsWith("http")) {
+                req = "POST".equals(method)
+                        ? client.post().uri(urlWithQuery.toString())
+                        : client.put().uri(urlWithQuery.toString());
+            } else {
+                req = "POST".equals(method)
+                        ? client.post().uri(urlWithQuery.toString())
+                        : client.put().uri(urlWithQuery.toString());
+            }
             if (inputParams.containsKey("body")) {
                 return req.bodyValue(inputParams.get("body"))
                     .retrieve()
