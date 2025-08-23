@@ -45,3 +45,6 @@ examples/manual_test.sh
 # Ignore generated annotation sources
 /target/generated-sources/
 /target/generated-test-sources/
+
+# External log directory (parent of swagger-mcp-server for log4j2)
+../log/
