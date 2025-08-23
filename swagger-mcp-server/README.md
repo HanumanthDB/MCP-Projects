@@ -57,14 +57,14 @@ Example `.mcp/config.json` for cline:
 {
   "mcpServers": {
     "swagger-mcp-server": {
-      "url": "http://localhost:8081/mcp",
+      "url": "http://localhost:8081/sse",
       "headers": {
         "Authorization": "Bearer your-token"
       },
       "alwaysAllow": ["*"],
       "disabled": false,
-      "description": "Local Swagger MCP server. Uses SSE via the /mcp endpoint. Set Authorization header if needed."
-    }
+      "description": "Local Swagger MCP server. Uses SSE via the /sse endpoint."
+    }   
   }
 }
 ```
@@ -72,11 +72,11 @@ Example `.mcp/config.json` for cline:
 
 ### 4. SSE Endpoint
 
-The server also exposes a Server-Sent Events (SSE) MCP protocol stream at [`/mcp`](http://localhost:8081/mcp).
+The server also exposes a Server-Sent Events (SSE) MCP protocol stream at [`/sse`](http://localhost:8081/sse).
 
 **Quick SSE manual test:**
 ```sh
-curl -N --max-time 5 http://localhost:8081/mcp | head -20
+curl -N --max-time 5 http://localhost:8081/sse | head -20
 ```
 You should see tool registration and protocol events stream as JSON or event data.
 
@@ -86,24 +86,57 @@ You should see tool registration and protocol events stream as JSON or event dat
 
 - `GET /tools` — Lists all MCP-exposed Swagger tools.
 - `POST /tools/{toolId}/invoke` — Invokes the given tool with request payload.
-- `GET /mcp` — SSE protocol endpoint for MCP clients.
+- `GET /sse` — SSE protocol endpoint for MCP clients.
 
 ---
+
+## Example API Test Scripts
+
+A set of sample curl commands is available at [`examples/example_curls.sh`](examples/example_curls.sh) for fast, repeatable manual API validation:
+```sh
+bash examples/example_curls.sh
+```
+- Tests health endpoint, pet add/get/update, order creation, user login, and error scenarios
+- Edit the `BASE_URL` variable at the script's top if your server isn't running at `http://localhost:8080`
+- Useful for onboarding, troubleshooting, or quickly verifying the API in a new environment
 
 ## Manual API & Protocol Test
 
-Use the included test script after starting your server:
+You can manually validate the `/sse` SSE endpoint and REST APIs using `curl`, an HTTP client, **or by simply running the above script for a full workflow**:
 
+**Test SSE endpoint:**
 ```sh
-cd swagger-mcp-server
-bash examples/manual_test.sh
+curl -N --max-time 5 http://localhost:8081/sse | head -20
 ```
+You should see a stream of tool registration and protocol activity as JSON or event data.
 
-What this covers:
-- [✓] Validates `/mcp` SSE endpoint streams protocol/tool activity.
-- [✓] Tests REST: Lists all tools with `/tools` and invokes core tools with `/tools/{toolId}/invoke`.
+**Test REST API:**
+- List all tools:
+  ```sh
+  curl http://localhost:8081/tools
+  ```
+- Invoke a tool (replace TOOL_ID with an actual tool id):
+  ```sh
+  curl -X POST -H "Content-Type: application/json" -d '{}' http://localhost:8081/tools/TOOL_ID/invoke
+  ```
 
 ---
+
+## Related Project: MCP SSE Bridge
+
+To use a Node.js-based SSE bridge with this server (for proxying `/sse` endpoint to JavaScript/Node clients and tools such as Cline), use the standalone **mcp-sse-bridge** project in the parent directory.
+
+- Project path: `../mcp-sse-bridge`
+- Includes: bridge source code, package.json, and usage documentation
+
+**Quick start:**
+```sh
+cd ../mcp-sse-bridge
+npm install
+node mcp_sse_bridge.js
+```
+
+See the bridge project’s `README.md` for configuration and further information.
 
 ## Project Structure
 
@@ -160,6 +193,5 @@ Contributions are welcome! Please open issues or pull requests for bug fixes, im
 
 ## License
 
-MIT or Apache-2.0 (choose/replace as needed).
 
 ---

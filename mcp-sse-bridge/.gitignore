@@ -1,0 +1,50 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Logs
+logs
+*.log
+logs/
+*.log.*
+*.swp
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Env Files
+.env
+.env.*
+!.env.example
+
+# coverage
+coverage/
+.nyc_output/
+
+# Build output
+dist/
+build/
+.out/
+.next/
+.release/
+tmp/
+temp/
+
+# VSCode
+.vscode/
+
+# Misc
+.eslintcache
+.idea/
+*.sublime-workspace
+*.sublime-project

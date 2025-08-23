@@ -1,6 +1,6 @@
 /**
  * MCP SSE Bridge for Spring Boot Swagger MCP Server
- * Exposes /mcp SSE endpoint for Cline, relays all tool traffic to Java server REST endpoints.
+ * Exposes /sse SSE endpoint for Cline, relays all tool traffic to Java server REST endpoints.
  * Usage: npm install express @modelcontextprotocol/sdk node-fetch
  * Launch with: node mcp_sse_bridge.js
  */
@@ -60,10 +60,10 @@ async function main() {
 
   const app = express();
   const transport = new SSEServerTransport(mcpServer);
-  app.use("/mcp", transport.requestHandler());
+  app.use("/sse", transport.requestHandler());
 
   app.listen(PORT, () => {
-    console.log(`MCP SSE bridge running on http://localhost:${PORT}/mcp (proxying Java MCP at ${JAVA_MCP_URL})`);
+    console.log(`MCP SSE bridge running on http://localhost:${PORT}/sse (proxying Java MCP at ${JAVA_MCP_URL})`);
   });
 }
 
