@@ -1,4 +1,4 @@
-# MCP_PROJECT
+# MCP Projects 
 
 This repository contains code and resources for the Model Context Protocol (MCP) Project.
 
@@ -34,4 +34,5 @@ See the [swagger-mcp-server/README.md](swagger-mcp-server/README.md) for instruc
 
 ## Contact
 
-Project owner: Hanumanta DB
+Project Owner: Hanumantappa Vaddar (hdbkpl@gmail.com)
+Preferred Name: Hanumanta
