@@ -1,0 +1,47 @@
+# Maven / Java / Spring Boot standard .gitignore
+
+# Maven output directory
+/target/
+
+# Eclipse/IntelliJ IDEA project files
+/.project
+/.classpath
+/.settings/
+/.idea
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment and custom config
+.env
+*.local.properties
+
+# Test output
+/coverage/
+build/
+
+# JAR/WAR/EAR files
+*.jar
+*.war
+*.ear
+
+# Others
+*.swp
+*~
+
+# Manual example or temp files
+examples/manual_test.sh
+
+# Ignore generated annotation sources
+/target/generated-sources/
+/target/generated-test-sources/
