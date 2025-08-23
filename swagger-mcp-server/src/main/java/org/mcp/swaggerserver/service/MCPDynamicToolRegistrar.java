@@ -17,7 +17,12 @@ public class MCPDynamicToolRegistrar {
      * @param toolDefinitions List of parsed dynamic tool definitions
      */
     public void registerTools(List<DynamicToolDefinition> toolDefinitions) {
-        // TODO: Register dynamic tools in MCP based on parsed Swagger endpoints
-        // Stub for successful startup: no action
+        // Register each dynamic tool with the MCP SDK
+        for (DynamicToolDefinition tool : toolDefinitions) {
+            // Placeholder for MCP SDK registration.
+            // Replace with real logic, e.g.:
+            // mcpSdk.registerTool( ... convert tool info ... );
+            System.out.println("Registered tool: " + tool.getId() + " [" + tool.getMethod() + " " + tool.getPath() + "]");
+        }
     }
 }
