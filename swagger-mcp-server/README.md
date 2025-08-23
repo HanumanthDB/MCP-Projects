@@ -2,7 +2,27 @@
 
 ## Overview
 
-A generic Model Context Protocol (MCP) server built using Spring Boot that dynamically converts any Swagger/OpenAPI (v2 or v3, JSON or YAML) API into MCP-exposed tools. Every discovered API endpoint is exposed as a tool, enabling secure and unified access via the MCP interface, compatible with Cline and similar clients. The server provides both RESTful and Server-Sent Events (SSE) transport at `/tools`, `/tools/{toolId}/invoke`, and `/mcp`.
+A generic Model Context Protocol (MCP) server built with Spring Boot that dynamically converts any Swagger/OpenAPI (v2 or v3, JSON or YAML) API into MCP-exposed tools. Every discovered API endpoint is exposed as a tool, enabling secure and unified access via the MCP interface, compatible with Cline and similar clients. The server provides both RESTful and Server-Sent Events (SSE) transport at `/tools`, `/tools/{toolId}/invoke`, and `/mcp`.
+
+---
+
+## Features
+
+- Dynamic discovery and exposure of Swagger/OpenAPI APIs as MCP tools
+- REST and Server-Sent Events (SSE) transport for seamless integration
+- Fully compatible with Cline and other MCP clients
+- Automatic endpoint registration and flexible API discovery
+- Support for both JSON and YAML Swagger/OpenAPI specs (v2 and v3)
+- Minimal configuration required—just point at your Swagger spec
+- Easily extensible for custom auth, dynamic switching, and refresh
+
+---
+
+## Prerequisites
+
+- Java 17+ (required)
+- Maven 3.6+
+- Internet access for fetching Swagger specifications (unless using local files)
 
 ---
 
@@ -120,6 +140,21 @@ mvn test
 
 - For secured swagger endpoints, set appropriate HTTP headers or handle auth in `SwaggerApiDiscoveryService`.
 - For dynamic refresh or programmatic spec switch, extend the service logic.
+
+---
+
+## Troubleshooting
+
+- **Port in use**: Make sure port `8081` is free, or change `server.port` in `application.properties`.
+- **Spec fetch errors**: Ensure the `swagger.spec.url` is reachable from your server.
+- **Class version errors**: Ensure you are using Java 17+.
+- **Dependency issues**: Run `mvn clean install -U` to force update dependencies.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please open issues or pull requests for bug fixes, improvements, or new features. For major changes, discuss them in a GitHub issue first.
 
 ---
 
