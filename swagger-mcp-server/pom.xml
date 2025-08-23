@@ -34,6 +34,13 @@
             <artifactId>mcp</artifactId>
             <version>0.11.2</version>
         </dependency>
+        <!-- MCP Spring Web MVC SSE Transport -->
+       <!-- https://mvnrepository.com/artifact/io.modelcontextprotocol.sdk/mcp-spring-webflux -->
+<dependency>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
+    <artifactId>mcp-spring-webflux</artifactId>
+    <version>0.11.2</version>
+</dependency>
 
         <!-- Swagger/OpenAPI parser (v2/v3) -->
         <dependency>

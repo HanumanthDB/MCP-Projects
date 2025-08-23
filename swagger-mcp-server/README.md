@@ -1,112 +1,100 @@
 # Swagger MCP Server
 
-## Cline MCP Usage & Configuration
+## Overview
 
-This MCP server exposes every endpoint in your configured Swagger/OpenAPI JSON as an MCP-compatible set of tools.
-You can use **Cline** as an MCP client to auto-discover, list, and invoke any of these tools from the command line or compatible IDE.
+A generic Model Context Protocol (MCP) server built using Spring Boot that dynamically converts any Swagger/OpenAPI (v2 or v3, JSON or YAML) API into MCP-exposed tools. Every discovered API endpoint is exposed as a tool, enabling secure and unified access via the MCP interface, compatible with Cline and similar clients. The server provides both RESTful and Server-Sent Events (SSE) transport at `/tools`, `/tools/{toolId}/invoke`, and `/mcp`.
 
-### 1. Quick Start
-
-- Launch your MCP server:
-
-  ```sh
-  cd swagger-mcp-server
-  mvn spring-boot:run
-  ```
-
-  By default, it will listen on `http://localhost:8081`, and expose the Swagger endpoint configured in `application.properties`.
-
-### 2. Cline MCP Configuration Example
-
-Add the following JSON to your `.mcp/config.json`:
-
-```json
-{
-  "servers": [
-    {
-      "name": "swagger-mcp-server",
-      "uri": "http://localhost:8081",
-      "description": "Generic MCP server exposing endpoints from your configured Swagger/OpenAPI definition as tools.",
-      "tools_path": "/tools",
-      "invoke_path_template": "/tools/{toolId}/invoke",
-      "options": {
-        "swaggerApiUrl": "https://petstore.swagger.io/v2/swagger.json"
-      }
-    }
-  ]
-}
-```
-
-- Adjust "uri" and "swaggerApiUrl" as needed for your setup.
-
-### 3. Usage
-
-- Reload or restart Cline; it will auto-discover all tools.
-- List all available Swagger-backed tools:
-  ```
-  cline mcp list-tools --server swagger-mcp-server
-  ```
-- Invoke any tool (replace {toolId} and JSON body as needed):
-  ```
-  cline mcp invoke-tool --server swagger-mcp-server --tool-id loginUser --params '{"username":"user1","password":"pass"}'
-  ```
-
-### 4. Further Integration
-
-You can register any other Swagger/OpenAPI endpoint by setting `swagger.api.url` in `application.properties` before server launch.
-
-For advanced options or troubleshooting, see the main MCP project or Cline documentation.
-
-A generic Model Context Protocol (MCP) server built using Spring Boot that dynamically converts any Swagger/OpenAPI (v2 or v3, JSON or YAML) API into MCP-exposed tools. Each discovered endpoint is exposed as a tool, allowing secure and unified access via the MCP interface.
-
-## Features
-
-- Ingests any valid Swagger/OpenAPI specification from a provided URL.
-- Supports both v2 (Swagger) and v3 (OpenAPI) specifications (JSON or YAML).
-- Dynamically parses API endpoints and exposes them as MCP tools using the [modelcontextprotocol Java SDK](https://mvnrepository.com/artifact/io.modelcontextprotocol.sdk/mcp).
-- Extensible with custom logic for access control, parameter transformation, etc.
+---
 
 ## Quick Start
 
-### Prerequisites
+### 1. Build and Run the Server
 
-- Java 17+
-- Maven
-
-### Building and Running
-
-```bash
+```sh
 cd swagger-mcp-server
-mvn clean spring-boot:run
+mvn clean package
+mvn spring-boot:run
 ```
 
-The server will start on port 8080 by default.
+(Or run with the JAR in `target/`.)
 
-### Configuration
+Default: `http://localhost:8081`
 
-Configure the Swagger spec URL (and any optional settings) in `application.properties`:
+### 2. Minimal Configuration
 
-```properties
-swagger.spec.url=http://your.swagger.api/swagger.json
+Edit `src/main/resources/application.properties` to specify your Swagger/OpenAPI spec source:
+
+```
+swagger.spec.url=https://petstore.swagger.io/v2/swagger.json
+server.port=8081
 ```
 
-## How it Works
+### 3. Usage with Cline (MCP Client) – Example
 
-1. On startup (or on demand), the server loads the configured Swagger/OpenAPI spec.
-2. Each endpoint is parsed into a dynamic tool definition (`DynamicToolDefinition`).
-3. These tools are registered with the MCP SDK, making them available to any connected MCP client.
-4. When a tool is invoked, it bridges the request to the appropriate real API endpoint, handling path/query/body parameters as required.
+Example `.mcp/config.json` for cline:
+
+```json
+{
+  "mcpServers": {
+    "swagger-mcp-server": {
+      "url": "http://localhost:8081/mcp",
+      "headers": {
+        "Authorization": "Bearer your-token"
+      },
+      "alwaysAllow": ["*"],
+      "disabled": false,
+      "description": "Local Swagger MCP server. Uses SSE via the /mcp endpoint. Set Authorization header if needed."
+    }
+  }
+}
+```
+- Adjust `"url"` and/or `"Authorization"` as needed.
+
+### 4. SSE Endpoint
+
+The server also exposes a Server-Sent Events (SSE) MCP protocol stream at [`/mcp`](http://localhost:8081/mcp).
+
+**Quick SSE manual test:**
+```sh
+curl -N --max-time 5 http://localhost:8081/mcp | head -20
+```
+You should see tool registration and protocol events stream as JSON or event data.
+
+---
+
+## Available Endpoints
+
+- `GET /tools` — Lists all MCP-exposed Swagger tools.
+- `POST /tools/{toolId}/invoke` — Invokes the given tool with request payload.
+- `GET /mcp` — SSE protocol endpoint for MCP clients.
+
+---
+
+## Manual API & Protocol Test
+
+Use the included test script after starting your server:
+
+```sh
+cd swagger-mcp-server
+bash examples/manual_test.sh
+```
+
+What this covers:
+- [✓] Validates `/mcp` SSE endpoint streams protocol/tool activity.
+- [✓] Tests REST: Lists all tools with `/tools` and invokes core tools with `/tools/{toolId}/invoke`.
+
+---
 
 ## Project Structure
 
-- `src/main/java/org/mcp/swaggerserver/service/SwaggerApiDiscoveryService.java`: Fetches and parses the Swagger file, extracts endpoints.
-- `src/main/java/org/mcp/swaggerserver/service/MCPDynamicToolRegistrar.java`: Registers discovered tools with the MCP SDK.
-- `src/main/java/org/mcp/swaggerserver/model/DynamicToolDefinition.java`: Model for dynamic tool descriptors.
-- `src/main/resources/application.properties`: Basic server and Swagger config.
+- `service/SwaggerApiDiscoveryService.java` — Loads/parses Swagger files.
+- `service/MCPDynamicToolRegistrar.java` — Registers endpoint tools.
+- `model/DynamicToolDefinition.java` — Dynamic tool meta model.
+- `config/McpSseWebFluxConfig.java` — MCP + Spring WebFlux wiring.
+
+---
 
 ## MCP SDK Dependency
-
-MCP integration is powered by:
 
 ```xml
 <dependency>
@@ -116,45 +104,27 @@ MCP integration is powered by:
 </dependency>
 ```
 
-## Usage Example (to be documented)
-
-- Coming soon: Add instructions for specifying Swagger spec URL via environment variable or REST endpoint (roadmap).
-- See inline code comments for main integration extension points.
+---
 
 ## Testing
 
-### Automated Tests
-
-To run the Spring Boot unit test (verifies application context loads):
-
-```bash
-cd swagger-mcp-server
+Run all automated tests:
+```sh
 mvn test
 ```
+(Minimal: verifies Spring context is correctly wired.)
 
-This runs all JUnit tests from `src/test/java`, such as the automatically included context load test.
+---
 
-### Manual API Test Script
+## Advanced Usage
 
-A sample shell script is provided in `examples/manual_test.sh` to manually test the server with curl:
+- For secured swagger endpoints, set appropriate HTTP headers or handle auth in `SwaggerApiDiscoveryService`.
+- For dynamic refresh or programmatic spec switch, extend the service logic.
 
-```bash
-cd swagger-mcp-server
-bash examples/manual_test.sh
-```
-
-- Checks server health status (via Spring Boot actuator).
-- Placeholders for listing registered MCP tools and invoking tool endpoints (to update as implementation proceeds).
-
-## Development Roadmap
-
-- [ ] Enhance Swagger discovery to support dynamic refresh
-- [ ] Support authentication to secured swagger endpoints
-- [ ] Advanced parameter/type mapping and input validation
-- [ ] Full error handling and diagnostics
+---
 
 ## License
 
-MIT or Apache-2.0 (specify your intended license here)
+MIT or Apache-2.0 (choose/replace as needed).
 
 ---
