@@ -10,11 +10,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.mcp.swaggerserver.config.SwaggerRestHeadersConfig;
 
 @Service
 public class EndpointInvokerService {
 
     private static final Logger log = LoggerFactory.getLogger(EndpointInvokerService.class);
+
+    @Autowired
+    private SwaggerRestHeadersConfig swaggerRestHeadersConfig;
 
     @Value("${api.base.url}")
     private String apiBaseUrlConfig;
@@ -64,6 +69,11 @@ public class EndpointInvokerService {
                         ? authHeaderPrefix + " " + authTokenValue
                         : authTokenValue;
                 commonHeaders.set(authHeaderName, headerValue);
+            }
+
+            // Add custom headers from config
+            if (swaggerRestHeadersConfig != null && swaggerRestHeadersConfig.getHeaders() != null) {
+                swaggerRestHeadersConfig.getHeaders().forEach(commonHeaders::set);
             }
 
             if ("GET".equals(method)) {
