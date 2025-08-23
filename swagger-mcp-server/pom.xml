@@ -23,11 +23,11 @@
     </properties>
 
     <dependencies>
-        <!-- Spring Boot Web for REST endpoints -->
-        <dependency>
+        <!-- Spring Boot WebFlux ONLY (for REST+SSE/reactive endpoints) -->
+        <!-- <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
+        </dependency> -->
         <!-- MCP SDK -->
         <dependency>
             <groupId>io.modelcontextprotocol.sdk</groupId>
