@@ -16,9 +16,12 @@ public class MCPDynamicToolRegistrar {
     private static final Logger log = LoggerFactory.getLogger(MCPDynamicToolRegistrar.class);
 
     private final io.modelcontextprotocol.server.McpAsyncServer mcpAsyncServer;
+    private final org.mcp.swaggerserver.service.EndpointInvokerService endpointInvokerService;
 
-    public MCPDynamicToolRegistrar(io.modelcontextprotocol.server.McpAsyncServer mcpAsyncServer) {
+    public MCPDynamicToolRegistrar(io.modelcontextprotocol.server.McpAsyncServer mcpAsyncServer,
+                                  org.mcp.swaggerserver.service.EndpointInvokerService endpointInvokerService) {
         this.mcpAsyncServer = mcpAsyncServer;
+        this.endpointInvokerService = endpointInvokerService;
     }
 
     /**
@@ -32,15 +35,7 @@ public class MCPDynamicToolRegistrar {
         if (toolDefinitions != null) {
             for (DynamicToolDefinition tool : toolDefinitions) {
                 try {
-                    // Build tool parameter schema (example: empty schema, adapt as needed)
-                    String schema = """
-                    {
-                      "type": "object",
-                      "properties": {
-                        "body": { "type": "object" }
-                      }
-                    }
-                    """;
+                    String schema = buildInputJsonSchema(tool);
 
                     var mcpTool = new io.modelcontextprotocol.spec.McpSchema.Tool(
                         tool.getId(),
@@ -50,14 +45,15 @@ public class MCPDynamicToolRegistrar {
 
                     var toolSpec = new io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification(
                         mcpTool,
-                        (exchange, arguments) -> {
-                            // TODO: Call endpoint using EndpointInvokerService or similar
-                            // Example: result = endpointInvokerService.invoke(tool, arguments);
-                            String result = "Tool executed: " + tool.getId();
-                            return reactor.core.publisher.Mono.just(
-                                new io.modelcontextprotocol.spec.McpSchema.CallToolResult(result, false)
-                            );
-                        }
+                        (exchange, arguments) -> 
+                            endpointInvokerService.invokeEndpoint(tool, arguments)
+                                .map(result -> new io.modelcontextprotocol.spec.McpSchema.CallToolResult(result, false))
+                                .onErrorResume(e -> {
+                                    log.error("Error invoking endpoint for toolId={}, error={}", tool.getId(), e.getMessage(), e);
+                                    return reactor.core.publisher.Mono.just(
+                                        new io.modelcontextprotocol.spec.McpSchema.CallToolResult("Invocation failed: " + e.getMessage(), true)
+                                    );
+                                })
                     );
 
                     mcpAsyncServer.addTool(toolSpec)
@@ -69,6 +65,70 @@ public class MCPDynamicToolRegistrar {
             }
         } else {
             log.warn("registerTools called with null toolDefinitions!");
+        }
+    }
+
+    /**
+     * Builds a JSON schema string for the input parameters of a tool,
+     * based on its DynamicToolDefinition.
+     */
+    private String buildInputJsonSchema(DynamicToolDefinition tool) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("  \"type\": \"object\",\n");
+        sb.append("  \"properties\": {\n");
+        if (tool.getParameters() != null) {
+            int idx = 0;
+            for (DynamicToolDefinition.ToolParameter param : tool.getParameters()) {
+                sb.append("    \"").append(param.getName()).append("\": {\n");
+                sb.append("      \"type\": \"").append(jsonTypeFor(param.getType())).append("\"");
+                if (param.getDescription() != null && !param.getDescription().isEmpty()) {
+                    sb.append(",\n      \"description\": \"").append(param.getDescription().replace("\"", "\\\"")).append("\"");
+                }
+                sb.append("\n    }");
+                if (idx < tool.getParameters().size() - 1) sb.append(",");
+                sb.append("\n");
+                idx++;
+            }
+        }
+        sb.append("  },\n");
+        // Mark required parameters
+        if (tool.getParameters() != null && !tool.getParameters().isEmpty()) {
+            List<String> required = new java.util.ArrayList<>();
+            for (DynamicToolDefinition.ToolParameter param : tool.getParameters()) {
+                if (param.isRequired()) required.add('"' + param.getName() + '"');
+            }
+            if (!required.isEmpty()) {
+                sb.append("  \"required\": [").append(String.join(", ", required)).append("],\n");
+            }
+        }
+        sb.append("  \"additionalProperties\": false\n");
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    /**
+     * Map Java type string to JSON Schema type.
+     */
+    private String jsonTypeFor(String javaType) {
+        if (javaType == null) return "string";
+        switch (javaType) {
+            case "integer":
+            case "int":
+            case "long":
+                return "integer";
+            case "number":
+            case "float":
+            case "double":
+                return "number";
+            case "boolean":
+                return "boolean";
+            case "object":
+                return "object";
+            case "array":
+                return "array";
+            default:
+                return "string";
         }
     }
 }

@@ -50,7 +50,7 @@ public class ToolController {
     }
 
     @PostMapping("/{toolId}/invoke")
-    public ResponseEntity<?> invoke(
+    public reactor.core.publisher.Mono<ResponseEntity<Object>> invoke(
             @PathVariable String toolId,
             @RequestBody(required = false) Map<String, Object> params
     ) {
@@ -58,7 +58,7 @@ public class ToolController {
         DynamicToolDefinition tool = toolRegistry.get(toolId);
         if (tool == null) {
             log.warn("Invocation failed: No tool with id: {}", toolId);
-            return ResponseEntity.badRequest().body("No tool with id: " + toolId);
+            return reactor.core.publisher.Mono.just(ResponseEntity.badRequest().body("No tool with id: " + toolId));
         }
         if (params == null) params = new HashMap<>();
         // Provide base URL for endpoint construction if needed by invoker
@@ -85,14 +85,17 @@ public class ToolController {
             log.warn("Failed to parse Swagger API URL '{}', defaulted apiBaseUrl to {}", swaggerApiUrl, apiBaseUrl, e);
         }
         params.put("_apiBaseUrl", apiBaseUrl);
-        try {
-            log.info("Invoking endpoint for tool: {} with params: {}", toolId, params);
-            String result = endpointInvokerService.invokeEndpoint(tool, params);
-            log.info("Invocation for tool {} returned result of length {}", toolId, result != null ? result.length() : 0);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.error("Invocation failed for toolId={} with params={}, error={}", toolId, params, e.getMessage(), e);
-            return ResponseEntity.internalServerError().body("Invocation failed: " + e.getMessage());
-        }
+        final String finalToolId = toolId;
+        final Map<String, Object> finalParams = new HashMap<>(params);
+        log.info("Invoking endpoint for tool: {} with params: {}", finalToolId, finalParams);
+        return endpointInvokerService.invokeEndpoint(tool, finalParams)
+            .map(result -> {
+                log.info("Invocation for tool {} returned result of length {}", finalToolId, result != null ? result.length() : 0);
+                return ResponseEntity.ok((Object) result);
+            })
+            .onErrorResume(e -> {
+                log.error("Invocation failed for toolId={} with params={}, error={}", finalToolId, finalParams, e.getMessage(), e);
+                return reactor.core.publisher.Mono.just(ResponseEntity.internalServerError().body("Invocation failed: " + e.getMessage()));
+            });
     }
 }

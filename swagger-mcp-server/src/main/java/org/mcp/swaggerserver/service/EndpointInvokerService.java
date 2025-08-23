@@ -20,7 +20,7 @@ public class EndpointInvokerService {
      * @param inputParams    Map of parameter name to value from user/tool invocation
      * @return Response as String (could be further modeled in the future)
      */
-    public String invokeEndpoint(DynamicToolDefinition toolDefinition, Map<String, Object> inputParams) {
+    public reactor.core.publisher.Mono<String> invokeEndpoint(DynamicToolDefinition toolDefinition, Map<String, Object> inputParams) {
         log.info("Invoking endpoint for tool id={}, path='{}', method={}", toolDefinition.getId(), toolDefinition.getPath(), toolDefinition.getMethod());
         // Build and execute HTTP request using WebClient, substitute params
 
@@ -43,17 +43,17 @@ public class EndpointInvokerService {
         try {
             if ("GET".equals(method)) {
                 log.debug("WebClient GET URL: {}", url);
+                log.debug("Input params for GET: {}", inputParams);
                 if (url.startsWith("http")) {
                     // Absolute URL
-                    String result = client.get().uri(url)
+                    return client.get().uri(url)
                             .retrieve()
                             .bodyToMono(String.class)
-                            .block();
-                    log.info("GET to {} returned {} bytes", url, result != null ? result.length() : 0);
-                    return result;
+                            .doOnNext(result -> log.info("GET to {} returned {} bytes", url, result != null ? result.length() : 0))
+                            .doOnError(e -> log.error("Error during WebClient GET to {}: {}", url, e.getMessage(), e));
                 } else {
                     // Relative path
-                    String result = client.get().uri(uriBuilder -> {
+                    return client.get().uri(uriBuilder -> {
                         org.springframework.web.util.UriBuilder builder = uriBuilder.path(url);
                         for (DynamicToolDefinition.ToolParameter param : toolDefinition.getParameters()) {
                             if ("query".equals(param.getInType()) && inputParams.containsKey(param.getName())) {
@@ -64,26 +64,24 @@ public class EndpointInvokerService {
                     })
                             .retrieve()
                             .bodyToMono(String.class)
-                            .block();
-                    log.info("GET to relative {} returned {} bytes", url, result != null ? result.length() : 0);
-                    return result;
+                            .doOnNext(result -> log.info("GET to relative {} returned {} bytes", url, result != null ? result.length() : 0))
+                            .doOnError(e -> log.error("Error during WebClient GET to relative {}: {}", url, e.getMessage(), e));
                 }
             } else if ("DELETE".equals(method)) {
                 log.debug("WebClient DELETE URL: {}", url);
+                log.debug("Input params for DELETE: {}", inputParams);
                 if (url.startsWith("http")) {
-                    String result = client.delete().uri(url)
+                    return client.delete().uri(url)
                             .retrieve()
                             .bodyToMono(String.class)
-                            .block();
-                    log.info("DELETE to {} returned {} bytes", url, result != null ? result.length() : 0);
-                    return result;
+                            .doOnNext(result -> log.info("DELETE to {} returned {} bytes", url, result != null ? result.length() : 0))
+                            .doOnError(e -> log.error("Error during WebClient DELETE to {}: {}", url, e.getMessage(), e));
                 } else {
-                    String result = client.delete().uri(url)
+                    return client.delete().uri(url)
                             .retrieve()
                             .bodyToMono(String.class)
-                            .block();
-                    log.info("DELETE to relative {} returned {} bytes", url, result != null ? result.length() : 0);
-                    return result;
+                            .doOnNext(result -> log.info("DELETE to relative {} returned {} bytes", url, result != null ? result.length() : 0))
+                            .doOnError(e -> log.error("Error during WebClient DELETE to relative {}: {}", url, e.getMessage(), e));
                 }
             } else if ("POST".equals(method) || "PUT".equals(method)) {
                 StringBuilder urlWithQuery = new StringBuilder(url);
@@ -96,6 +94,7 @@ public class EndpointInvokerService {
                     }
                 }
                 log.debug("WebClient {} URL: {}", method, urlWithQuery);
+                log.debug("Input params for {}: {}", method, inputParams);
                 org.springframework.web.reactive.function.client.WebClient.RequestBodySpec req;
                 if (urlWithQuery.toString().startsWith("http")) {
                     req = "POST".equals(method)
@@ -106,28 +105,27 @@ public class EndpointInvokerService {
                             ? client.post().uri(urlWithQuery.toString())
                             : client.put().uri(urlWithQuery.toString());
                 }
-                String result;
                 if (inputParams.containsKey("body")) {
-                    result = req.bodyValue(inputParams.get("body"))
+                    return req.bodyValue(inputParams.get("body"))
                             .retrieve()
                             .bodyToMono(String.class)
-                            .block();
+                            .doOnNext(result -> log.info("{} to {} returned {} bytes", method, urlWithQuery, result != null ? result.length() : 0))
+                            .doOnError(e -> log.error("Error during WebClient {} to {}: {}", method, urlWithQuery, e.getMessage(), e));
                 } else {
-                    result = req
+                    return req
                             .retrieve()
                             .bodyToMono(String.class)
-                            .block();
+                            .doOnNext(result -> log.info("{} to {} returned {} bytes", method, urlWithQuery, result != null ? result.length() : 0))
+                            .doOnError(e -> log.error("Error during WebClient {} to {}: {}", method, urlWithQuery, e.getMessage(), e));
                 }
-                log.info("{} to {} returned {} bytes", method, urlWithQuery, result != null ? result.length() : 0);
-                return result;
             } else {
                 log.error("Unsupported HTTP method: {}", toolDefinition.getMethod());
-                throw new UnsupportedOperationException("Unsupported HTTP method: " + toolDefinition.getMethod());
+                return reactor.core.publisher.Mono.error(new UnsupportedOperationException("Unsupported HTTP method: " + toolDefinition.getMethod()));
             }
         } catch (Exception e) {
             log.error("Error invoking endpoint toolId={}, url={}, method={}, params={}, error={}",
                 toolDefinition.getId(), url, method, inputParams, e.getMessage(), e);
-            throw e;
+            return reactor.core.publisher.Mono.error(e);
         }
     }
 }
