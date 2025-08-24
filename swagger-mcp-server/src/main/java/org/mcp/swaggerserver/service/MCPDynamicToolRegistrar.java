@@ -1,74 +1,66 @@
 package org.mcp.swaggerserver.service;
 
-import org.mcp.swaggerserver.model.DynamicToolDefinition;
-import org.springframework.stereotype.Service;
 import java.util.List;
 
-/**
- * Registers Swagger endpoint tool definitions as MCP tools using the MCP SDK.
- */
+import org.mcp.swaggerserver.model.DynamicToolDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.stereotype.Service;
 
 @Service
 public class MCPDynamicToolRegistrar {
 
+    
+    @Value("${swagger.api.url}")
+    private String swaggerApiUrl;
+
     private static final Logger log = LoggerFactory.getLogger(MCPDynamicToolRegistrar.class);
 
-    private final io.modelcontextprotocol.server.McpAsyncServer mcpAsyncServer;
+    private final SwaggerApiDiscoveryService discoveryService;
     private final org.mcp.swaggerserver.service.EndpointInvokerService endpointInvokerService;
 
-    public MCPDynamicToolRegistrar(io.modelcontextprotocol.server.McpAsyncServer mcpAsyncServer,
-                                  org.mcp.swaggerserver.service.EndpointInvokerService endpointInvokerService) {
-        this.mcpAsyncServer = mcpAsyncServer;
+    public MCPDynamicToolRegistrar(SwaggerApiDiscoveryService discoveryService,
+                     org.mcp.swaggerserver.service.EndpointInvokerService endpointInvokerService) {
+        this.discoveryService = discoveryService;
         this.endpointInvokerService = endpointInvokerService;
     }
 
     /**
-     * For each discovered tool definition, register it as a tool on this MCP server.
-     * Called at startup or when Swagger is refreshed.
-     *
-     * @param toolDefinitions List of parsed dynamic tool definitions
+     * On app startup, load and expose all Swagger endpoints as Spring AI ToolCallbacks.
      */
-    public void registerTools(List<DynamicToolDefinition> toolDefinitions) {
-        log.debug("registerTools called with {} tool(s)", toolDefinitions != null ? toolDefinitions.size() : 0);
-        log.info("Registering {} dynamic tool(s) to MCP server ...", toolDefinitions != null ? toolDefinitions.size() : 0);
-        if (toolDefinitions != null) {
-            for (DynamicToolDefinition tool : toolDefinitions) {
-                log.debug("Registering tool id={} method={} path={}", tool.getId(), tool.getMethod(), tool.getPath());
-                try {
-                    String schema = buildInputJsonSchema(tool);
+    @Bean
+    public ToolCallbackProvider swaggerTools() {
+        log.info("Loading Swagger tools from API at {}", swaggerApiUrl);
+        List<DynamicToolDefinition> endpointTools = discoveryService.loadToolsFromSwagger(swaggerApiUrl);
 
-                    var mcpTool = new io.modelcontextprotocol.spec.McpSchema.Tool(
-                        tool.getId(),
-                        tool.getSummary() != null ? tool.getSummary() : tool.getMethod() + " " + tool.getPath(),
-                        schema
-                    );
+        List<ToolCallback> tools = endpointTools.stream()
+            .map(toolDef -> 
+                org.springframework.ai.tool.function.FunctionToolCallback.builder(
+                        toolDef.getId(),
+                        (java.util.Map<String, Object> argumentMap) -> {
+                            try {
+                                log.info("Invoking tool {} with arguments {}", toolDef.getId(), argumentMap);
+                                return endpointInvokerService.invokeEndpoint(toolDef, argumentMap).block();
+                            } catch (Exception e) {
+                                log.error("Error invoking tool {}: {}", toolDef.getId(), e.getMessage(), e);
+                                throw new RuntimeException("Tool invocation failed for '" + toolDef.getId() + "'. Reason: " + e.getMessage() + ". Please check your input and try again.", e);
+                            }
+                        })
+                    .description(
+                        toolDef.getSummary() != null
+                            ? toolDef.getSummary()
+                            : toolDef.getMethod() + " " + toolDef.getPath())
+                    .inputType(java.util.Map.class)
+                    .inputSchema(buildInputJsonSchema(toolDef))
+                    .build()
+            )
+            .collect(java.util.stream.Collectors.toList());
 
-                    var toolSpec = new io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification(
-                        mcpTool,
-                        (exchange, arguments) -> 
-                            endpointInvokerService.invokeEndpoint(tool, arguments)
-                                .map(result -> new io.modelcontextprotocol.spec.McpSchema.CallToolResult(result, false))
-                                .onErrorResume(e -> {
-                                    log.error("Error invoking endpoint for toolId={}, error={}", tool.getId(), e.getMessage(), e);
-                                    return reactor.core.publisher.Mono.just(
-                                        new io.modelcontextprotocol.spec.McpSchema.CallToolResult("Invocation failed: " + e.getMessage(), true)
-                                    );
-                                })
-                    );
-
-                    mcpAsyncServer.addTool(toolSpec)
-                        .doOnSuccess(v -> log.info("Registered MCP tool: id={}, method={}, path={}", tool.getId(), tool.getMethod(), tool.getPath()))
-                        .doOnError(e -> log.debug("Failed to register tool id={}: {}", tool.getId(), e))
-                        .subscribe();
-                } catch (Exception e) {
-                    log.error("Failed to register tool: id={}, error={}", tool.getId(), e.getMessage(), e);
-                }
-            }
-        } else {
-            log.warn("registerTools called with null toolDefinitions!");
-        }
+        return ToolCallbackProvider.from(tools);
     }
 
     /**
@@ -80,31 +72,50 @@ public class MCPDynamicToolRegistrar {
         sb.append("{\n");
         sb.append("  \"type\": \"object\",\n");
         sb.append("  \"properties\": {\n");
-        if (tool.getParameters() != null) {
-            int idx = 0;
-            for (DynamicToolDefinition.ToolParameter param : tool.getParameters()) {
+        boolean hasParams = tool.getParameters() != null && !tool.getParameters().isEmpty();
+        int entryCount = 0;
+
+        // Existing parameter entries (query/path)
+        if (hasParams) {
+            for (int idx = 0; idx < tool.getParameters().size(); idx++) {
+                DynamicToolDefinition.ToolParameter param = tool.getParameters().get(idx);
                 sb.append("    \"").append(param.getName()).append("\": {\n");
                 sb.append("      \"type\": \"").append(jsonTypeFor(param.getType())).append("\"");
                 if (param.getDescription() != null && !param.getDescription().isEmpty()) {
                     sb.append(",\n      \"description\": \"").append(param.getDescription().replace("\"", "\\\"")).append("\"");
                 }
                 sb.append("\n    }");
+                entryCount++;
                 if (idx < tool.getParameters().size() - 1) sb.append(",");
                 sb.append("\n");
-                idx++;
             }
         }
+
+        // Detect and inject schema for requestBody endpoints
+        if (tool.hasRequestBody()) {
+            if (entryCount > 0) sb.append(",\n");
+            sb.append("    \"body\": {\n");
+            sb.append("      \"type\": \"object\",\n");
+            sb.append("      \"description\": \"JSON payload body (see API spec for fields)\"\n");
+            sb.append("    }\n");
+        }
+
         sb.append("  },\n");
-        // Mark required parameters
-        if (tool.getParameters() != null && !tool.getParameters().isEmpty()) {
-            List<String> required = new java.util.ArrayList<>();
+
+        // Mark required parameters (including body if needed)
+        List<String> required = new java.util.ArrayList<>();
+        if (hasParams) {
             for (DynamicToolDefinition.ToolParameter param : tool.getParameters()) {
                 if (param.isRequired()) required.add('"' + param.getName() + '"');
             }
-            if (!required.isEmpty()) {
-                sb.append("  \"required\": [").append(String.join(", ", required)).append("],\n");
-            }
         }
+        if (tool.hasRequestBody()) {
+            required.add("\"body\"");
+        }
+        if (!required.isEmpty()) {
+            sb.append("  \"required\": [").append(String.join(", ", required)).append("],\n");
+        }
+
         sb.append("  \"additionalProperties\": false\n");
         sb.append("}\n");
         return sb.toString();
@@ -115,23 +126,14 @@ public class MCPDynamicToolRegistrar {
      */
     private String jsonTypeFor(String javaType) {
         if (javaType == null) return "string";
-        switch (javaType) {
-            case "integer":
-            case "int":
-            case "long":
-                return "integer";
-            case "number":
-            case "float":
-            case "double":
-                return "number";
-            case "boolean":
-                return "boolean";
-            case "object":
-                return "object";
-            case "array":
-                return "array";
-            default:
-                return "string";
-        }
+        return switch (javaType) {
+            case "integer", "int", "long" -> "integer";
+            case "number", "float", "double" -> "number";
+            case "boolean" -> "boolean";
+            case "object" -> "object";
+            case "array" -> "array";
+            default -> "string";
+        };
     }
+
 }

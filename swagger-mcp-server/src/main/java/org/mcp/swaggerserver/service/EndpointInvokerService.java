@@ -1,148 +1,129 @@
 package org.mcp.swaggerserver.service;
 
-import org.mcp.swaggerserver.model.DynamicToolDefinition;
-import org.springframework.stereotype.Service;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import org.mcp.swaggerserver.config.SwaggerRestHeadersConfig;
+import org.mcp.swaggerserver.model.DynamicToolDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.mcp.swaggerserver.config.SwaggerRestHeadersConfig;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import reactor.core.publisher.Mono;
 
 @Service
 public class EndpointInvokerService {
 
     private static final Logger log = LoggerFactory.getLogger(EndpointInvokerService.class);
 
-    @Autowired
-    private SwaggerRestHeadersConfig swaggerRestHeadersConfig;
+    private final WebClient webClient;
+    private final SwaggerRestHeadersConfig swaggerRestHeadersConfig;
+    private final String apiBaseUrlConfig;
+    private final String authHeaderName;
+    private final String authHeaderPrefix;
+    private final String authTokenValue;
 
-    @Value("${api.base.url}")
-    private String apiBaseUrlConfig;
+    // Use constructor injection for dependencies - it's a best practice
+    public EndpointInvokerService(
+            WebClient.Builder webClientBuilder, // Inject the builder to create a configured instance
+            SwaggerRestHeadersConfig swaggerRestHeadersConfig,
+            @Value("${api.base.url}") String apiBaseUrlConfig,
+            @Value("${auth.header.name:}") String authHeaderName,
+            @Value("${auth.header.prefix:}") String authHeaderPrefix,
+            @Value("${auth.token.value:}") String authTokenValue
+    ) {
+        this.webClient = webClientBuilder.build();
+        this.swaggerRestHeadersConfig = swaggerRestHeadersConfig;
+        this.apiBaseUrlConfig = apiBaseUrlConfig;
+        this.authHeaderName = authHeaderName;
+        this.authHeaderPrefix = authHeaderPrefix;
+        this.authTokenValue = authTokenValue;
+    }
 
-    @Value("${auth.header.name:}")
-    private String authHeaderName;
+    public Mono<String> invokeEndpoint(DynamicToolDefinition toolDefinition, Map<String, Object> inputParams) {
+        log.info("Invoking endpoint for tool id={}, path='{}', method={}",
+                toolDefinition.getId(), toolDefinition.getPath(), toolDefinition.getMethod());
 
-    @Value("${auth.header.prefix:}")
-    private String authHeaderPrefix;
+        final String apiBaseUrl = inputParams.getOrDefault("_apiBaseUrl", apiBaseUrlConfig).toString();
+        final HttpMethod httpMethod = HttpMethod.valueOf(toolDefinition.getMethod().toUpperCase());
 
-    @Value("${auth.token.value:}")
-    private String authTokenValue;
+        // Extract path variables for safe URI building
+        final Map<String, Object> pathParams = toolDefinition.getParameters().stream()
+                .filter(p -> "path".equals(p.getInType()) && inputParams.containsKey(p.getName()))
+                .collect(Collectors.toMap(DynamicToolDefinition.ToolParameter::getName, p -> inputParams.get(p.getName())));
 
-    /**
-     * Call the actual API endpoint described in the tool definition,
-     * passing dynamic parameters.
-     *
-     * @param toolDefinition Tool metadata (endpoint to invoke)
-     * @param inputParams    Map of parameter name to value from user/tool invocation
-     * @return Response as String
-     */
-    public reactor.core.publisher.Mono<String> invokeEndpoint(DynamicToolDefinition toolDefinition, Map<String, Object> inputParams) {
-        log.info("Invoking endpoint for tool id={}, path='{}', method={}", toolDefinition.getId(), toolDefinition.getPath(), toolDefinition.getMethod());
-
-        String apiBaseUrl = inputParams.containsKey("_apiBaseUrl") ?
-                inputParams.get("_apiBaseUrl").toString() : apiBaseUrlConfig;
-
-        String path = toolDefinition.getPath();
-        // Fill path params if any
-        for (DynamicToolDefinition.ToolParameter param : toolDefinition.getParameters()) {
-            if ("path".equals(param.getInType()) && inputParams.containsKey(param.getName())) {
-                String key = "{" + param.getName() + "}";
-                path = path.replace(key, inputParams.get(param.getName()).toString());
-            }
-        }
-        String url = apiBaseUrl + path;
-
-        RestTemplate restTemplate = new RestTemplate();
-        String method = toolDefinition.getMethod().toUpperCase();
-
-        try {
-            // Prepare authentication header if values are present
-            HttpHeaders commonHeaders = new HttpHeaders();
-            if (authHeaderName != null && !authHeaderName.isEmpty() &&
-                authTokenValue != null && !authTokenValue.isEmpty()) {
-                String headerValue = (authHeaderPrefix != null && !authHeaderPrefix.isEmpty())
-                        ? authHeaderPrefix + " " + authTokenValue
-                        : authTokenValue;
-                commonHeaders.set(authHeaderName, headerValue);
-            }
-
-            // Add custom headers from config
-            if (swaggerRestHeadersConfig != null && swaggerRestHeadersConfig.getHeaders() != null) {
-                swaggerRestHeadersConfig.getHeaders().forEach(commonHeaders::set);
-            }
-
-            if ("GET".equals(method)) {
-                log.debug("RestTemplate GET URL: {}", url);
-                log.debug("Input params for GET: {}", inputParams);
-                // Prepare query params (if any)
-                if (toolDefinition.getParameters() != null) {
-                    StringBuilder sb = new StringBuilder(url);
-                    boolean hasQ = false;
-                    for (DynamicToolDefinition.ToolParameter param : toolDefinition.getParameters()) {
-                        if ("query".equals(param.getInType()) && inputParams.containsKey(param.getName())) {
-                            sb.append(hasQ ? "&" : "?");
-                            sb.append(param.getName()).append("=").append(inputParams.get(param.getName()));
-                            hasQ = true;
-                        }
+        // The WebClient request spec
+        WebClient.RequestBodySpec requestSpec = webClient
+                .method(httpMethod)
+                .uri(apiBaseUrl + toolDefinition.getPath(), uriBuilder -> {
+                    // WebClient handles query parameter building and encoding safely
+                    toolDefinition.getParameters().stream()
+                            .filter(p -> "query".equals(p.getInType()) && inputParams.containsKey(p.getName()))
+                            .forEach(p -> uriBuilder.queryParam(p.getName(), inputParams.get(p.getName())));
+                    return uriBuilder.build(pathParams); // Pass path variables here for safe substitution
+                })
+                .headers(httpHeaders -> {
+                    // Set auth header if configured
+                    if (StringUtils.hasText(authHeaderName) && StringUtils.hasText(authTokenValue)) {
+                        String headerValue = StringUtils.hasText(authHeaderPrefix)
+                                ? authHeaderPrefix + " " + authTokenValue
+                                : authTokenValue;
+                        httpHeaders.set(authHeaderName, headerValue);
                     }
-                    url = sb.toString();
-                }
-                HttpEntity<Void> entity = new HttpEntity<>(commonHeaders);
-                ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-                log.info("GET to {} returned {} bytes", url, response.getBody() != null ? response.getBody().length() : 0);
-                return reactor.core.publisher.Mono.justOrEmpty(response.getBody());
-            } else if ("DELETE".equals(method)) {
-                log.debug("RestTemplate DELETE URL: {}", url);
-                log.debug("Input params for DELETE: {}", inputParams);
-                HttpEntity<Void> entity = new HttpEntity<>(commonHeaders);
-                ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.DELETE, entity, String.class);
-                log.info("DELETE to {} executed, status={}", url, response.getStatusCode());
-                return reactor.core.publisher.Mono.just("Deleted");
-            } else if ("POST".equals(method) || "PUT".equals(method)) {
-                StringBuilder urlWithQuery = new StringBuilder(url);
-                boolean hasQuery = false;
-                if (toolDefinition.getParameters() != null) {
-                    for (DynamicToolDefinition.ToolParameter param : toolDefinition.getParameters()) {
-                        if ("query".equals(param.getInType()) && inputParams.containsKey(param.getName())) {
-                            urlWithQuery.append(hasQuery ? "&" : "?");
-                            urlWithQuery.append(param.getName()).append("=").append(inputParams.get(param.getName()));
-                            hasQuery = true;
-                        }
+                    // Add all custom headers from config
+                    if (swaggerRestHeadersConfig != null && swaggerRestHeadersConfig.getHeaders() != null) {
+                        swaggerRestHeadersConfig.getHeaders().forEach(httpHeaders::set);
                     }
-                }
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                headers.putAll(commonHeaders);
+                });
 
-                HttpEntity<Object> entity;
+        switch (httpMethod.name()) {
+            case "GET" -> {
+                return executeRequest(requestSpec, toolDefinition, inputParams)
+                        .bodyToMono(String.class)
+                        .doOnSuccess(response -> log.info("{} to {} successful", toolDefinition.getMethod(), toolDefinition.getPath()))
+                        .doOnError(error -> log.error("Error invoking endpoint toolId={}, path={}, method={}, params={}, error={}",
+                                toolDefinition.getId(), toolDefinition.getPath(), toolDefinition.getMethod(), inputParams, error.getMessage(), error));
+            }
+            case "DELETE" -> {
+                return executeRequest(requestSpec, toolDefinition, inputParams)
+                        .toBodilessEntity() // We don't care about the body
+                        .then(Mono.just("Deleted")) // Return a static string on success, preserving original logic
+                        .doOnSuccess(response -> log.info("{} to {} successful", toolDefinition.getMethod(), toolDefinition.getPath()))
+                        .doOnError(error -> log.error("Error invoking endpoint toolId={}, path={}, method={}, params={}, error={}",
+                                toolDefinition.getId(), toolDefinition.getPath(), toolDefinition.getMethod(), inputParams, error.getMessage(), error));
+            }
+            case "POST", "PUT" -> {
+                requestSpec.contentType(MediaType.APPLICATION_JSON);
                 if (inputParams.containsKey("body")) {
-                    entity = new HttpEntity<>(inputParams.get("body"), headers);
-                } else {
-                    entity = new HttpEntity<>(headers);
+                    requestSpec.bodyValue(inputParams.get("body"));
                 }
-                log.debug("RestTemplate {} URL: {}", method, urlWithQuery);
-                log.debug("Input params for {}: {}", method, inputParams);
-                ResponseEntity<String> response;
-                if ("POST".equals(method)) {
-                    response = restTemplate.postForEntity(urlWithQuery.toString(), entity, String.class);
-                } else {
-                    response = restTemplate.exchange(urlWithQuery.toString(), HttpMethod.PUT, entity, String.class);
-                }
-                log.info("{} to {} returned {} bytes", method, urlWithQuery, response.getBody() != null ? response.getBody().length() : 0);
-                return reactor.core.publisher.Mono.justOrEmpty(response.getBody());
-            } else {
-                log.error("Unsupported HTTP method: {}", toolDefinition.getMethod());
-                return reactor.core.publisher.Mono.error(new UnsupportedOperationException("Unsupported HTTP method: " + toolDefinition.getMethod()));
+                return executeRequest(requestSpec, toolDefinition, inputParams)
+                        .bodyToMono(String.class)
+                        .doOnSuccess(response -> log.info("{} to {} successful", toolDefinition.getMethod(), toolDefinition.getPath()))
+                        .doOnError(error -> log.error("Error invoking endpoint toolId={}, path={}, method={}, params={}, error={}",
+                                toolDefinition.getId(), toolDefinition.getPath(), toolDefinition.getMethod(), inputParams, error.getMessage(), error));
             }
-        } catch (Exception e) {
-            log.error("Error invoking endpoint toolId={}, url={}, method={}, params={}, error={}",
-                toolDefinition.getId(), url, method, inputParams, e.getMessage(), e);
-            return reactor.core.publisher.Mono.error(e);
+            default -> {
+                log.error("Unsupported HTTP method: {}", httpMethod);
+                return Mono.error(new UnsupportedOperationException("Unsupported HTTP method: " + httpMethod));
+            }
         }
+    }
+
+    private WebClient.ResponseSpec executeRequest(WebClient.RequestHeadersSpec<?> requestSpec, DynamicToolDefinition toolDefinition, Map<String, Object> inputParams) {
+        return requestSpec.retrieve()
+                .onStatus(
+                        status -> status.is4xxClientError() || status.is5xxServerError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(errorBody -> {
+                                    log.error("Error response from endpoint: status={}, body={}", clientResponse.statusCode(), errorBody);
+                                    return Mono.error(new RuntimeException("API call failed with status " + clientResponse.statusCode() + " and body: " + errorBody));
+                                })
+                );
     }
 }

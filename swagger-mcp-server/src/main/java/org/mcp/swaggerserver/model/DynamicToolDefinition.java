@@ -32,6 +32,19 @@ public class DynamicToolDefinition {
     public List<ToolParameter> getParameters() { return parameters; }
     public void setParameters(List<ToolParameter> parameters) { this.parameters = parameters; }
 
+    /**
+     * Returns true if this tool definition represents an endpoint with a request body (e.g. POST body payload).
+     */
+    public boolean hasRequestBody() {
+        if (parameters == null) return false;
+        for (ToolParameter param : parameters) {
+            if ("body".equalsIgnoreCase(param.getInType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static class ToolParameter {
         private String name;
         private String inType;       // path, query, header, body

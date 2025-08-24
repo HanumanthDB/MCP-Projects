@@ -1,10 +1,12 @@
+
 # Swagger MCP Server
 
 ## Overview
 
-A generic Model Context Protocol (MCP) server built with Spring Boot that dynamically converts any Swagger/OpenAPI (v2 or v3, JSON or YAML) API into MCP-exposed tools. Every discovered API endpoint is exposed as a tool, enabling secure and unified access via the MCP interface, compatible with Cline and similar clients. The server provides both RESTful and Server-Sent Events (SSE) transport at `/tools`, `/tools/{toolId}/invoke`, and `/mcp`.
+This project is a generic Model Context Protocol (MCP) server built with Spring Boot and Spring WebFlux. It dynamically converts any Swagger/OpenAPI (v2 or v3, JSON or YAML) API into MCP-exposed tools. Each discovered API endpoint is exposed as a tool, enabling secure and unified access via the MCP interface, compatible with Cline and similar clients. The server provides both RESTful and Server-Sent Events (SSE) transport at `/tools`, `/tools/{toolId}/invoke`, and `/sse`.
 
 ---
+
 
 ## Features
 
@@ -15,16 +17,20 @@ A generic Model Context Protocol (MCP) server built with Spring Boot that dynami
 - Support for both JSON and YAML Swagger/OpenAPI specs (v2 and v3)
 - Minimal configuration required—just point at your Swagger spec
 - Easily extensible for custom auth, dynamic switching, and refresh
+- Reactive stack (Spring WebFlux)
+- Health and info endpoints via Spring Boot Actuator
 
 ---
 
+
 ## Prerequisites
 
-- Java 17+ (required)
+- Java 17+
 - Maven 3.6+
 - Internet access for fetching Swagger specifications (unless using local files)
 
 ---
+
 
 ## Quick Start
 
@@ -35,23 +41,32 @@ cd swagger-mcp-server
 mvn clean package
 mvn spring-boot:run
 ```
-
-(Or run with the JAR in `target/`.)
-
+Or run with the JAR in `target/`:
+```sh
+java -jar target/swagger-mcp-server-*.jar
+```
 Default: `http://localhost:8081`
 
-### 2. Minimal Configuration
+### 2. Configuration
 
-Edit `src/main/resources/application.properties` to specify your Swagger/OpenAPI spec source:
+Edit `src/main/resources/application.properties` to specify your Swagger/OpenAPI spec source and base URL:
 
 ```
-swagger.spec.url=https://petstore.swagger.io/v2/swagger.json
+swagger.api.url=https://petstore.swagger.io/v2/swagger.json
+api.base.url=https://petstore.swagger.io/v2
 server.port=8081
 ```
+You can also set custom headers for authentication:
+```
+auth.header.name=Authorization
+auth.header.prefix=Bearer
+auth.token.value=your-token-here
+```
 
-### 3. Usage with Cline (MCP Client) – Example
 
-Example `.mcp/config.json` for cline:
+### 3. Usage with Cline (MCP Client)
+
+Example `.mcp/config.json` for Cline:
 
 ```json
 {
@@ -64,15 +79,15 @@ Example `.mcp/config.json` for cline:
       "alwaysAllow": ["*"],
       "disabled": false,
       "description": "Local Swagger MCP server. Uses SSE via the /sse endpoint."
-    }   
+    }
   }
 }
 ```
-- Adjust `"url"` and/or `"Authorization"` as needed.
+Adjust `"url"` and `"Authorization"` as needed.
 
 ### 4. SSE Endpoint
 
-The server also exposes a Server-Sent Events (SSE) MCP protocol stream at [`/sse`](http://localhost:8081/sse).
+The server exposes a Server-Sent Events (SSE) MCP protocol stream at [`/sse`](http://localhost:8081/sse).
 
 **Quick SSE manual test:**
 ```sh
@@ -82,33 +97,35 @@ You should see tool registration and protocol events stream as JSON or event dat
 
 ---
 
+
 ## Available Endpoints
 
-- `GET /tools` — Lists all MCP-exposed Swagger tools.
-- `POST /tools/{toolId}/invoke` — Invokes the given tool with request payload.
-- `GET /sse` — SSE protocol endpoint for MCP clients.
+- `GET /tools` — Lists all MCP-exposed Swagger tools
+- `POST /tools/{toolId}/invoke` — Invokes the given tool with request payload
+- `GET /sse` — SSE protocol endpoint for MCP clients
+- `/actuator/health` and `/actuator/info` — Health and info endpoints
 
 ---
 
+
 ## Example API Test Scripts
 
-A set of sample curl commands is available at [`examples/example_curls.sh`](examples/example_curls.sh) for fast, repeatable manual API validation:
+Sample curl commands are available at [`examples/example_curls.sh`](examples/example_curls.sh):
 ```sh
 bash examples/example_curls.sh
 ```
 - Tests health endpoint, pet add/get/update, order creation, user login, and error scenarios
-- Edit the `BASE_URL` variable at the script's top if your server isn't running at `http://localhost:8080`
-- Useful for onboarding, troubleshooting, or quickly verifying the API in a new environment
+- Edit the `BASE_URL` variable at the script's top if your server isn't running at `http://localhost:8081`
+
 
 ## Manual API & Protocol Test
 
-You can manually validate the `/sse` SSE endpoint and REST APIs using `curl`, an HTTP client, **or by simply running the above script for a full workflow**:
+You can manually validate the `/sse` SSE endpoint and REST APIs using `curl`, an HTTP client, or by running the above script:
 
 **Test SSE endpoint:**
 ```sh
 curl -N --max-time 5 http://localhost:8081/sse | head -20
 ```
-You should see a stream of tool registration and protocol activity as JSON or event data.
 
 **Test REST API:**
 - List all tools:
@@ -121,6 +138,7 @@ You should see a stream of tool registration and protocol activity as JSON or ev
   ```
 
 ---
+
 
 ## Related Project: MCP SSE Bridge
 
@@ -138,26 +156,28 @@ node mcp_sse_bridge.js
 
 See the bridge project’s `README.md` for configuration and further information.
 
+
 ## Project Structure
 
-- `service/SwaggerApiDiscoveryService.java` — Loads/parses Swagger files.
-- `service/MCPDynamicToolRegistrar.java` — Registers endpoint tools.
-- `model/DynamicToolDefinition.java` — Dynamic tool meta model.
-- `config/McpSseWebFluxConfig.java` — MCP + Spring WebFlux wiring.
+- `service/SwaggerApiDiscoveryService.java` — Loads/parses Swagger files
+- `service/MCPDynamicToolRegistrar.java` — Registers endpoint tools
+- `service/EndpointInvokerService.java` — Invokes discovered endpoints
+- `controller/ToolController.java` — REST API for tool listing/invocation
+- `model/DynamicToolDefinition.java` — Dynamic tool meta model
+- `config/SwaggerRestHeadersConfig.java` — Custom REST headers config
 
 ---
 
-## MCP SDK Dependency
 
-```xml
-<dependency>
-    <groupId>io.modelcontextprotocol.sdk</groupId>
-    <artifactId>mcp</artifactId>
-    <version>0.11.2</version>
-</dependency>
-```
+## Major Dependencies
+
+- Spring Boot (WebFlux, Actuator)
+- Spring AI MCP Server WebFlux
+- Swagger/OpenAPI: springdoc-openapi, swagger-parser, openapi4j
+- MCP SDK: `io.modelcontextprotocol.sdk:mcp:0.11.2`
 
 ---
+
 
 ## Testing
 
@@ -169,21 +189,25 @@ mvn test
 
 ---
 
+
 ## Advanced Usage
 
-- For secured swagger endpoints, set appropriate HTTP headers or handle auth in `SwaggerApiDiscoveryService`.
+- For secured Swagger endpoints, set appropriate HTTP headers in `application.properties` or handle auth in `SwaggerApiDiscoveryService`.
 - For dynamic refresh or programmatic spec switch, extend the service logic.
 
 ---
 
+
 ## Troubleshooting
 
 - **Port in use**: Make sure port `8081` is free, or change `server.port` in `application.properties`.
-- **Spec fetch errors**: Ensure the `swagger.spec.url` is reachable from your server.
+- **Spec fetch errors**: Ensure the `swagger.api.url` is reachable from your server.
 - **Class version errors**: Ensure you are using Java 17+.
 - **Dependency issues**: Run `mvn clean install -U` to force update dependencies.
+- **Auth errors**: Set `auth.header.name`, `auth.header.prefix`, and `auth.token.value` in `application.properties` if your API requires authentication.
 
 ---
+
 
 ## Contributing
 
@@ -191,7 +215,9 @@ Contributions are welcome! Please open issues or pull requests for bug fixes, im
 
 ---
 
+
 ## License
 
+Specify your license here (e.g., MIT, Apache 2.0, etc.)
 
 ---

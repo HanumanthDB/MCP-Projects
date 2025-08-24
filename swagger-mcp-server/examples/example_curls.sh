@@ -73,4 +73,19 @@ echo "========== User Logout Example =========="
 curl -i "$BASE_URL/api/user/logout"
 echo -e "\n"
 
+echo "========== Create User (dummy data) =========="
+curl -i -X POST "$BASE_URL/api/user" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": 123,
+    "username": "dummyuser",
+    "firstName": "Dummy",
+    "lastName": "User",
+    "email": "dummyuser@example.com",
+    "password": "password123",
+    "phone": "123-456-7890",
+    "userStatus": 1
+  }'
+echo -e "\n"
+
 # End of examples.
